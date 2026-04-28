@@ -1,29 +1,79 @@
-You are a daily news bot for Boom (พี่บุ๋ม), a civil engineer at CRD in Chiang Mai, Thailand.
+name: Send LINE on news update
 
-TASK: When you run, do these steps in order:
+on:
+  push:
+    paths:
+      - 'news/**'
+  workflow_dispatch:
 
-1. SEARCH the web for today's news in Thai language, covering 4 categories:
-   - ตลาดหุ้นไทย (SET Index, CRD.BK, หุ้นกลุ่มก่อสร้าง)
-   - ทองคำ และ Bitcoin (ราคาและแนวโน้ม)
-   - ข่าวอุตสาหกรรมก่อสร้างไทย (โครงการรัฐ, ราคาวัสดุ, แรงงาน)
-   - ภูมิรัฐศาสตร์โลกที่กระทบไทย
-
-2. WRITE a markdown file to news/YYYY-MM-DD.md with:
-   - Header: # ข่าวประจำวันที่ {today's date}
-   - 4 sections (## หัวข้อ) with 3-5 bullet points each
-   - ตัวเลขสำคัญต้องมี (ราคา, %, จำนวน)
-   - Use today's date in YYYY-MM-DD format from `date +%Y-%m-%d`
-
-3. COMMIT and push the file:
-   git add news/
-   git commit -m "📰 News $(date +%Y-%m-%d)"
-   git push origin main
-
-DO NOT:
-- Modify any files outside news/
-- Run more than 5 web searches
-- Create branches (push directly to main)
-- Send LINE messages (GitHub Actions handles that automatically when you push)
-
-ON SUCCESS: Print "✅ News file pushed: news/YYYY-MM-DD.md"
-ON ERROR: Print the error clearly and stop
+jobs:
+  send-line:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Find latest news file
+        id: find_news
+        run: |
+          LATEST=$(ls -t news/*.md 2>/dev/null | head -n 1)
+          if [ -z "$LATEST" ]; then
+            echo "❌ No news file found"
+            exit 1
+          fi
+          echo "Found: $LATEST"
+          echo "filepath=$LATEST" >> $GITHUB_OUTPUT
+          echo "filename=$(basename $LATEST .md)" >> $GITHUB_OUTPUT
+      
+      - name: Send LINE Push Message
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          FILEPATH: ${{ steps.find_news.outputs.filepath }}
+          FILENAME: ${{ steps.find_news.outputs.filename }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 << 'EOF'
+          import json, os, urllib.request
+          
+          filepath = os.environ['FILEPATH']
+          filename = os.environ['FILENAME']
+          token = os.environ['LINE_TOKEN']
+          user_id = os.environ['LINE_USER_ID']
+          repo = os.environ['REPO']
+          
+          # อ่านไฟล์ข่าว
+          content = open(filepath, encoding='utf-8').read()
+          if len(content) > 4200:
+              content = content[:4200] + "\n...(ตัด)"
+          
+          repo_url = f"https://github.com/{repo}/blob/main/{filepath}"
+          message = f"📰 ข่าวประจำวัน {filename}\n━━━━━━━━━━━━━\n{content}\n\n🔗 ดูเต็ม: {repo_url}"
+          
+          payload = {
+              "to": user_id,
+              "messages": [{"type": "text", "text": message}]
+          }
+          
+          req = urllib.request.Request(
+              "https://api.line.me/v2/bot/message/push",
+              data=json.dumps(payload).encode('utf-8'),
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Content-Type": "application/json"
+              },
+              method="POST"
+          )
+          
+          try:
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  print(f"✅ LINE sent: HTTP {r.status}")
+                  print(r.read().decode())
+          except urllib.error.HTTPError as e:
+              print(f"❌ LINE failed: HTTP {e.code}")
+              print(e.read().decode())
+              exit(1)
+          EOF
