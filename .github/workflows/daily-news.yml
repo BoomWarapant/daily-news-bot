@@ -1,40 +1,29 @@
-name: Daily News Bot
+You are a daily news bot for Boom (พี่บุ๋ม), a civil engineer at CRD in Chiang Mai, Thailand.
 
-on:
-  schedule:
-    # 06:00 เวลาไทย = 23:00 UTC ของวันก่อนหน้า
-    - cron: '0 23 * * *'
-  workflow_dispatch:
+TASK: When you run, do these steps in order:
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      
-      - name: Fetch news + send LINE
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-        run: python scripts/fetch_news.py
-      
-      - name: Commit news file to repo
-        run: |
-          git config user.name "news-bot"
-          git config user.email "bot@users.noreply.github.com"
-          git add news/
-          git diff --cached --quiet || git commit -m "📰 News $(date -u +%Y-%m-%d)"
-          git push
+1. SEARCH the web for today's news in Thai language, covering 4 categories:
+   - ตลาดหุ้นไทย (SET Index, CRD.BK, หุ้นกลุ่มก่อสร้าง)
+   - ทองคำ และ Bitcoin (ราคาและแนวโน้ม)
+   - ข่าวอุตสาหกรรมก่อสร้างไทย (โครงการรัฐ, ราคาวัสดุ, แรงงาน)
+   - ภูมิรัฐศาสตร์โลกที่กระทบไทย
+
+2. WRITE a markdown file to news/YYYY-MM-DD.md with:
+   - Header: # ข่าวประจำวันที่ {today's date}
+   - 4 sections (## หัวข้อ) with 3-5 bullet points each
+   - ตัวเลขสำคัญต้องมี (ราคา, %, จำนวน)
+   - Use today's date in YYYY-MM-DD format from `date +%Y-%m-%d`
+
+3. COMMIT and push the file:
+   git add news/
+   git commit -m "📰 News $(date +%Y-%m-%d)"
+   git push origin main
+
+DO NOT:
+- Modify any files outside news/
+- Run more than 5 web searches
+- Create branches (push directly to main)
+- Send LINE messages (GitHub Actions handles that automatically when you push)
+
+ON SUCCESS: Print "✅ News file pushed: news/YYYY-MM-DD.md"
+ON ERROR: Print the error clearly and stop
