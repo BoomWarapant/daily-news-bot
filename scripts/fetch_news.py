@@ -11,32 +11,26 @@ GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY", "")
 
 NEWS_PROMPT = """สรุปข่าวสำคัญประจำวันของวันนี้ (ภาษาไทย) แบ่งเป็น 4 หมวด:
 
-## 📈 ตลาดหุ้นไทย
+## ตลาดหุ้นไทย
 - SET Index ปิดที่เท่าไหร่ +/- กี่จุด
 - CRD.BK ราคาและความเคลื่อนไหว
 - หุ้นกลุ่มก่อสร้างเด่นๆ
 
-## 💰 ทอง + Bitcoin
+## ทอง + Bitcoin
 - ราคาทองคำ (สมาคมค้าทอง)
 - Bitcoin USD
 
-## 🏗️ ข่าวก่อสร้างไทย
+## ข่าวก่อสร้างไทย
 - โครงการรัฐ/เอกชนใหม่
-- ราคาวัสดุก่อสร้าง (เหล็ก, ปูน)
+- ราคาวัสดุก่อสร้าง
 - ข่าวแรงงานก่อสร้าง
 
-## 🌏 ภูมิรัฐศาสตร์ที่กระทบไทย
-- เศรษฐกิจโลก, การค้า, นโยบายที่กระทบไทย
-
-ข้อกำหนด:
-- bullet points สั้นๆ มีตัวเลขสำคัญ
-- ไม่ต้องมีคำเกริ่นนำ
-- ข้อมูลล่าสุด ณ วันนี้เท่านั้น
+## ภูมิรัฐศาสตร์
+- เศรษฐกิจโลกที่กระทบไทย
 """
 
 
 def debug_secrets():
-    """ตรวจสอบว่า secrets สะอาด ไม่มีอักขระแปลก"""
     print("=" * 50)
     print("DEBUG SECRETS")
     print("=" * 50)
@@ -48,15 +42,20 @@ def debug_secrets():
     ]:
         try:
             val.encode('ascii')
-            ascii_ok = "✅ ASCII OK"
+            ascii_ok = "OK"
         except UnicodeEncodeError as e:
-            ascii_ok = f"❌ NOT ASCII at position {e.start}-{e.end}"
+            ascii_ok = f"FAIL at position {e.start}-{e.end}"
         
         print(f"{name}:")
         print(f"  Length: {len(val)}")
-        print(f"  ASCII check: {ascii_ok}")
+        print(f"  ASCII: {ascii_ok}")
         print(f"  First 10: [{val[:10]}]")
         print(f"  Last 10:  [{val[-10:]}]")
+        
+        # ดูแต่ละ byte ที่ไม่ใช่ ASCII
+        bad_chars = [(i, ord(c)) for i, c in enumerate(val) if ord(c) > 127]
+        if bad_chars:
+            print(f"  Bad chars: {bad_chars[:10]}")
         print()
     print("=" * 50)
 
@@ -81,20 +80,20 @@ def save_to_file(content):
     today = datetime.now().strftime("%Y-%m-%d")
     Path("news").mkdir(exist_ok=True)
     filepath = Path("news") / f"{today}.md"
-    header = f"# ข่าวประจำวันที่ {today}\n\n"
+    header = f"# News {today}\n\n"
     filepath.write_text(header + content, encoding="utf-8")
     return filepath, today
 
 
 def send_line(content, today):
     repo_url = f"https://github.com/{GITHUB_REPO}/blob/main/news/{today}.md"
-    body = content[:4200] + "\n...(ตัด)" if len(content) > 4200 else content
+    body = content[:4200] + "\n...(cut)" if len(content) > 4200 else content
     
     message = (
-        f"📰 ข่าวประจำวัน {today}\n"
-        f"━━━━━━━━━━━━━━━\n"
+        f"News {today}\n"
+        f"---\n"
         f"{body}\n\n"
-        f"🔗 ดูเต็ม: {repo_url}"
+        f"Full: {repo_url}"
     )
     
     r = requests.post(
@@ -110,21 +109,21 @@ def send_line(content, today):
         timeout=30
     )
     r.raise_for_status()
-    print(f"✅ LINE sent: HTTP {r.status_code}")
+    print(f"LINE sent: HTTP {r.status_code}")
 
 
 if __name__ == "__main__":
-    debug_secrets()  # ← เพิ่มตัวนี้เพื่อ debug
+    debug_secrets()
     
-    print("🔍 Fetching news from Claude...")
+    print("Fetching news from Claude...")
     content = fetch_news()
-    print(f"   Got {len(content)} chars")
+    print(f"Got {len(content)} chars")
     
-    print("💾 Saving to file...")
+    print("Saving to file...")
     filepath, today = save_to_file(content)
-    print(f"   Saved: {filepath}")
+    print(f"Saved: {filepath}")
     
-    print("📲 Sending LINE...")
+    print("Sending LINE...")
     send_line(content, today)
     
-    print("🎉 Done!")
+    print("Done!")
