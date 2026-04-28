@@ -4,10 +4,9 @@ from pathlib import Path
 import anthropic
 import requests
 
-# ──────── CONFIG ────────
-ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-LINE_TOKEN = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
-LINE_USER_ID = os.environ["LINE_USER_ID"]
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"].strip()
+LINE_TOKEN = os.environ["LINE_CHANNEL_ACCESS_TOKEN"].strip()
+LINE_USER_ID = os.environ["LINE_USER_ID"].strip()
 GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY", "")
 
 NEWS_PROMPT = """สรุปข่าวสำคัญประจำวันของวันนี้ (ภาษาไทย) แบ่งเป็น 4 หมวด:
@@ -35,7 +34,33 @@ NEWS_PROMPT = """สรุปข่าวสำคัญประจำวัน
 - ข้อมูลล่าสุด ณ วันนี้เท่านั้น
 """
 
-# ──────── 1) เรียก Claude พร้อม web_search ────────
+
+def debug_secrets():
+    """ตรวจสอบว่า secrets สะอาด ไม่มีอักขระแปลก"""
+    print("=" * 50)
+    print("DEBUG SECRETS")
+    print("=" * 50)
+    
+    for name, val in [
+        ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
+        ("LINE_CHANNEL_ACCESS_TOKEN", LINE_TOKEN),
+        ("LINE_USER_ID", LINE_USER_ID),
+    ]:
+        try:
+            val.encode('ascii')
+            ascii_ok = "✅ ASCII OK"
+        except UnicodeEncodeError as e:
+            ascii_ok = f"❌ NOT ASCII at position {e.start}-{e.end}"
+        
+        print(f"{name}:")
+        print(f"  Length: {len(val)}")
+        print(f"  ASCII check: {ascii_ok}")
+        print(f"  First 10: [{val[:10]}]")
+        print(f"  Last 10:  [{val[-10:]}]")
+        print()
+    print("=" * 50)
+
+
 def fetch_news():
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
@@ -51,7 +76,7 @@ def fetch_news():
     text_parts = [b.text for b in response.content if b.type == "text"]
     return "\n".join(text_parts).strip()
 
-# ──────── 2) บันทึกเป็น markdown ────────
+
 def save_to_file(content):
     today = datetime.now().strftime("%Y-%m-%d")
     Path("news").mkdir(exist_ok=True)
@@ -60,11 +85,9 @@ def save_to_file(content):
     filepath.write_text(header + content, encoding="utf-8")
     return filepath, today
 
-# ──────── 3) ส่ง LINE Push Message ────────
+
 def send_line(content, today):
     repo_url = f"https://github.com/{GITHUB_REPO}/blob/main/news/{today}.md"
-    
-    # LINE limit 5000 chars — เผื่อ header/footer
     body = content[:4200] + "\n...(ตัด)" if len(content) > 4200 else content
     
     message = (
@@ -89,8 +112,10 @@ def send_line(content, today):
     r.raise_for_status()
     print(f"✅ LINE sent: HTTP {r.status_code}")
 
-# ──────── MAIN ────────
+
 if __name__ == "__main__":
+    debug_secrets()  # ← เพิ่มตัวนี้เพื่อ debug
+    
     print("🔍 Fetching news from Claude...")
     content = fetch_news()
     print(f"   Got {len(content)} chars")
