@@ -1,5 +1,4 @@
 name: Send LINE on news update
-
 on:
   push:
     paths:
@@ -16,17 +15,18 @@ jobs:
         with:
           fetch-depth: 2
       
-      - name: Find latest news file
+      - name: Find today's news file
         id: find_news
         run: |
-          LATEST=$(ls -t news/*.md 2>/dev/null | head -n 1)
-          if [ -z "$LATEST" ]; then
-            echo "❌ No news file found"
+          TODAY=$(TZ='Asia/Bangkok' date +%Y-%m-%d)
+          FILEPATH="news/${TODAY}.md"
+          echo "Looking for: $FILEPATH"
+          if [ ! -f "$FILEPATH" ]; then
+            echo "::error::No news file for today ($TODAY). Bot did not commit. Aborting LINE send."
             exit 1
           fi
-          echo "Found: $LATEST"
-          echo "filepath=$LATEST" >> $GITHUB_OUTPUT
-          echo "filename=$(basename $LATEST .md)" >> $GITHUB_OUTPUT
+          echo "filepath=$FILEPATH" >> $GITHUB_OUTPUT
+          echo "filename=$TODAY" >> $GITHUB_OUTPUT
       
       - name: Send LINE Push Message
         env:
@@ -45,7 +45,6 @@ jobs:
           user_id = os.environ['LINE_USER_ID']
           repo = os.environ['REPO']
           
-          # อ่านไฟล์ข่าว
           content = open(filepath, encoding='utf-8').read()
           if len(content) > 4200:
               content = content[:4200] + "\n...(ตัด)"
